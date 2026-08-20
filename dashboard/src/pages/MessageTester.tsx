@@ -54,42 +54,112 @@ export function MessageTester() {
   }, [groups, selectedGroup, recipientType]);
 
   const handleSend = async () => {
-    const targetId = recipientType === 'group' ? selectedGroup : recipient;
-    if (!session || !targetId) return;
-    setIsLoading(true);
-    setResponse(null);
+  const targetId = recipientType === 'group' ? selectedGroup : recipient;
 
-    const chatId = recipientType === 'group' ? targetId : targetId.replace(/[^0-9]/g, '') + '@c.us';
+  if (!session || !targetId) return;
 
-    try {
-      let result;
-      if (messageType === 'text') {
-        result = await messageApi.sendText(session, chatId, content);
-      } else if (messageType === 'image') {
-        result = await messageApi.sendImage(session, chatId, mediaUrl, content);
-      } else if (messageType === 'video') {
-        result = await messageApi.sendVideo(session, chatId, mediaUrl, content);
-      } else if (messageType === 'audio') {
-        result = await messageApi.sendAudio(session, chatId, mediaUrl);
-      } else {
-        result = await messageApi.sendDocument(session, chatId, mediaUrl, content);
+  setIsLoading(true);
+  setResponse(null);
+
+  try {
+            const recipients = targetId
+  .split(/[\n,;]/)
+  .map(num => num.trim())
+  .filter(Boolean)
+  .map(num => num.replace(/\D/g, ""));
+
+    let successCount = 0;
+    let failedCount = 0;
+    const results: any[] = [];
+
+    for (const recipientItem of recipients) {
+      try {
+        const chatId =
+          recipientType === 'group'
+            ? recipientItem
+            : `${recipientItem}@c.us`;
+
+        let result;
+
+        if (messageType === 'text') {
+          result = await messageApi.sendText(
+            session,
+            chatId,
+            content
+          );
+        } else if (messageType === 'image') {
+          result = await messageApi.sendImage(
+            session,
+            chatId,
+            mediaUrl,
+            content
+          );
+        } else if (messageType === 'video') {
+          result = await messageApi.sendVideo(
+            session,
+            chatId,
+            mediaUrl,
+            content
+          );
+        } else if (messageType === 'audio') {
+          result = await messageApi.sendAudio(
+            session,
+            chatId,
+            mediaUrl
+          );
+        } else {
+          result = await messageApi.sendDocument(
+            session,
+            chatId,
+            mediaUrl,
+            content
+          );
+        }
+
+        successCount++;
+
+        results.push({
+          phone: recipientItem,
+          success: true,
+          messageId: result?.messageId,
+        });
+
+        // Delay between sends
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error: any) {
+        failedCount++;
+
+        results.push({
+          phone: recipientItem,
+          success: false,
+          error:
+            error?.response?.data?.message ||
+            error?.message ||
+            'Failed',
+        });
       }
-
-      setResponse({
-        success: !!result.messageId,
-        messageId: result.messageId,
-        timestamp: result.timestamp ? new Date(result.timestamp * 1000).toISOString() : new Date().toISOString(),
-      });
-    } catch (err) {
-      setResponse({
-        success: false,
-        timestamp: new Date().toISOString(),
-        error: err instanceof Error ? err.message : t('messageTester.sendFailed'),
-      });
-    } finally {
-      setIsLoading(false);
     }
-  };
+
+    setResponse({
+      success: successCount > 0,
+      messageId: `Success: ${successCount}, Failed: ${failedCount}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log('Bulk Send Results:', results);
+  } catch (err) {
+    setResponse({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error:
+        err instanceof Error
+          ? err.message
+          : t('messageTester.sendFailed'),
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   if (loadingSessions) {
     return (
@@ -210,12 +280,21 @@ export function MessageTester() {
                   <label>
                     {messageType === 'document' ? t('messageTester.filename') : t('messageTester.caption')} ({t('common.optional')})
                   </label>
-                  <input
+                  {/* <input
                     type="text"
                     value={content}
                     onChange={e => setContent(e.target.value)}
                     placeholder={messageType === 'document' ? t('messageTester.filenamePlaceholder') : t('messageTester.captionPlaceholder')}
-                  />
+                  /> */}
+                  <textarea
+  value={content}
+  onChange={(e) => setContent(e.target.value)}
+  rows={6}
+  style={{
+    whiteSpace: 'pre-wrap',
+    lineHeight: '1.5',
+  }}
+/>
                 </div>
               )}
             </>
